@@ -3,6 +3,7 @@ import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { useStockfish } from '../hooks/useStockfish';
 import { CUSTOM_PIECES } from '../components/ChessPieces';
+import EvalBar from '../components/EvalBar';
 
 export default function Analysis() {
     const [game, setGame] = useState(new Chess());
@@ -119,15 +120,18 @@ export default function Analysis() {
                 {/* Board Section */}
                 <div className="lg:col-span-2">
                     <div className="glass-card p-6">
-                        <div className="max-w-[500px] mx-auto">
-                            <Chessboard
-                                position={game.fen()}
-                                onPieceDrop={onDrop}
-                                boardWidth={480}
-                                customDarkSquareStyle={{ backgroundColor: '#4f46e5' }}
-                                customLightSquareStyle={{ backgroundColor: '#e0e7ff' }}
-                                customPieces={CUSTOM_PIECES}
-                            />
+                        <div className="flex gap-4 max-w-[540px] mx-auto items-stretch">
+                            <div className="flex-1">
+                                <Chessboard
+                                    position={game.fen()}
+                                    onPieceDrop={onDrop}
+                                    boardWidth={480}
+                                    customDarkSquareStyle={{ backgroundColor: '#4f46e5' }}
+                                    customLightSquareStyle={{ backgroundColor: '#e0e7ff' }}
+                                    customPieces={CUSTOM_PIECES}
+                                />
+                            </div>
+                            <EvalBar evaluation={evaluation} />
                         </div>
                         <div className="flex gap-3 justify-center mt-6">
                             <button

@@ -6,21 +6,34 @@ import {
     getLichessProfile,
     getPlayingGames,
 } from '../services/lichess';
+import {
+    getChesscomUsername,
+    saveChesscomUsername,
+    clearChesscomUsername,
+    getChesscomProfile,
+    getChesscomStats,
+} from '../services/chesscom';
 
 /**
  * Auth store using Zustand
- * Manages Lichess authentication state
+ * Manages Lichess and Chess.com authentication state
  */
 export const useAuthStore = create((set, get) => ({
-    // State
+    // Lichess State
     isAuthenticated: !!getLichessToken(),
     token: getLichessToken(),
     user: null,
     playingGames: [],
+
+    // Chess.com State
+    chesscomUsername: getChesscomUsername(),
+    chesscomUser: null,
+
+    // Shared State
     isLoading: false,
     error: null,
 
-    // Actions
+    // Lichess Actions
     setToken: async (token) => {
         saveLichessToken(token);
         set({ token, isAuthenticated: true, isLoading: true });
@@ -73,5 +86,61 @@ export const useAuthStore = create((set, get) => ({
             console.error('Failed to fetch playing games:', err);
             return [];
         }
+    },
+
+    // Chess.com Actions
+    setChesscomUsername: async (username) => {
+        if (!username?.trim()) return;
+
+        set({ isLoading: true, error: null });
+
+        try {
+            // Validate username exists and fetch stats
+            const [profile, stats] = await Promise.all([
+                getChesscomProfile(username),
+                getChesscomStats(username),
+            ]);
+
+            saveChesscomUsername(username);
+            set({
+                chesscomUsername: username,
+                chesscomUser: { ...profile, stats },
+                isLoading: false,
+            });
+        } catch (err) {
+            set({ error: err.message, isLoading: false });
+            throw err;
+        }
+    },
+
+    loadChesscomProfile: async () => {
+        const username = get().chesscomUsername;
+        if (!username) return;
+
+        set({ isLoading: true });
+        try {
+            const [profile, stats] = await Promise.all([
+                getChesscomProfile(username),
+                getChesscomStats(username),
+            ]);
+            set({
+                chesscomUser: { ...profile, stats },
+                isLoading: false,
+            });
+        } catch (err) {
+            // Username might be invalid now
+            if (err.message.includes('not found')) {
+                get().clearChesscomAccount();
+            }
+            set({ error: err.message, isLoading: false });
+        }
+    },
+
+    clearChesscomAccount: () => {
+        clearChesscomUsername();
+        set({
+            chesscomUsername: null,
+            chesscomUser: null,
+        });
     },
 }));

@@ -14,6 +14,7 @@ export function useStockfish() {
     const [principalVariation, setPrincipalVariation] = useState([]);
 
     const workerRef = useRef(null);
+    const currentFenRef = useRef(null); // Track current FEN to determine side to move
 
     useEffect(() => {
         // Create worker directly from stockfish.js
@@ -43,6 +44,13 @@ export function useStockfish() {
         };
     }, []);
 
+    // Helper to determine if it's Black's turn from FEN
+    const isBlackToMove = useCallback(() => {
+        if (!currentFenRef.current) return false;
+        const parts = currentFenRef.current.split(' ');
+        return parts[1] === 'b';
+    }, []);
+
     const parseUciOutput = useCallback((output) => {
         // Handle "uciok" - engine is ready
         if (output === 'uciok') {
@@ -66,11 +74,20 @@ export function useStockfish() {
 
             if (scoreMatch) {
                 const [, type, value] = scoreMatch;
+                let evalValue = parseInt(value);
+
+                // Stockfish reports from side-to-move perspective
+                // We always want evaluation from White's perspective
+                if (isBlackToMove()) {
+                    evalValue = -evalValue;
+                }
+
                 if (type === 'cp') {
                     // Centipawns to pawns
-                    setEvaluation((parseInt(value) / 100).toFixed(2));
+                    setEvaluation((evalValue / 100).toFixed(2));
                 } else if (type === 'mate') {
-                    setEvaluation(`M${value}`);
+                    // For mate, also flip the sign
+                    setEvaluation(`M${evalValue}`);
                 }
             }
 
@@ -88,7 +105,7 @@ export function useStockfish() {
                 setIsAnalyzing(false);
             }
         }
-    }, []);
+    }, [isBlackToMove]);
 
     const sendCommand = useCallback((command) => {
         if (workerRef.current) {
@@ -102,13 +119,15 @@ export function useStockfish() {
      * @param {number} [targetDepth=20] - Depth to search
      */
     const analyze = useCallback((fen, targetDepth = 20) => {
+        currentFenRef.current = fen; // Store the FEN to determine side to move
         setIsAnalyzing(true);
         setBestMove(null);
         setEvaluation(null);
         setDepth(0);
         setPrincipalVariation([]);
 
-        sendCommand('ucinewgame');
+        // Don't send ucinewgame on every move for analysis, it's too heavy
+        // sendCommand('ucinewgame');
         sendCommand(`position fen ${fen}`);
         sendCommand(`go depth ${targetDepth}`);
     }, [sendCommand]);
@@ -129,3 +148,4 @@ export function useStockfish() {
         stop,
     };
 }
+

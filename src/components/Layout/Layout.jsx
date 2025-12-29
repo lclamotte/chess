@@ -4,7 +4,7 @@ import { startLichessAuth } from '../../services/lichess';
 import { useEffect } from 'react';
 
 function Navbar() {
-    const { isAuthenticated, user, isLoading, logout, loadProfile } = useAuthStore();
+    const { isAuthenticated, user, chesscomUsername, isLoading, logout, loadProfile } = useAuthStore();
 
     useEffect(() => {
         if (isAuthenticated && !user) {
@@ -14,7 +14,6 @@ function Navbar() {
 
     const navItems = [
         { to: '/', label: 'Home', icon: '♟' },
-        { to: '/live', label: 'Live', icon: '🔴' },
         { to: '/recents', label: 'Recents', icon: '🕐' },
         { to: '/analysis', label: 'Analysis', icon: '🔍' },
         { to: '/stats', label: 'Stats', icon: '📊' },
@@ -56,19 +55,36 @@ function Navbar() {
                     ))}
                 </div>
 
-                <div className="flex items-center gap-3">
-                    {isAuthenticated && user && (
-                        <div className="flex items-center gap-2 text-sm">
-                            <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                            <span className="text-slate-300">{user.username}</span>
-                        </div>
-                    )}
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-4 border-r border-slate-700 pr-4">
+                        {isAuthenticated && user && (
+                            <div className="flex items-center gap-2 group">
+                                <img
+                                    src="https://lichess.org/assets/logo/lichess-favicon-32.png"
+                                    alt="Lichess"
+                                    className="w-4 h-4"
+                                />
+                                <span className="text-sm text-slate-300 font-medium">{user.username}</span>
+                            </div>
+                        )}
+                        {chesscomUsername && (
+                            <div className="flex items-center gap-2 group">
+                                <img
+                                    src="https://www.chess.com/bundles/web/images/color-icons/handshake.svg"
+                                    alt="Chess.com"
+                                    className="w-4 h-4"
+                                />
+                                <span className="text-sm text-slate-300 font-medium">{chesscomUsername}</span>
+                            </div>
+                        )}
+                    </div>
+
                     <button
                         onClick={handleAuth}
-                        className={isAuthenticated ? 'btn-secondary text-sm' : 'btn-primary text-sm'}
+                        className={isAuthenticated ? 'btn-secondary text-sm px-4' : 'btn-primary text-sm px-6'}
                         disabled={isLoading}
                     >
-                        {isLoading ? 'Loading...' : isAuthenticated ? 'Logout' : 'Connect Lichess'}
+                        {isLoading ? '...' : isAuthenticated ? 'Logout' : 'Connect Lichess'}
                     </button>
                 </div>
             </div>
