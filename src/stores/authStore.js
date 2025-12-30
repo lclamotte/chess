@@ -12,6 +12,7 @@ import {
     clearChesscomUsername,
     getChesscomProfile,
     getChesscomStats,
+    getChesscomCurrentGames,
 } from '../services/chesscom';
 
 /**
@@ -76,16 +77,40 @@ export const useAuthStore = create((set, get) => ({
 
     fetchPlayingGames: async () => {
         const token = get().token;
-        if (!token) return [];
+        const chesscomUsername = get().chesscomUsername;
+
+        let lichessGames = [];
+        let chesscomGames = [];
 
         try {
-            const data = await getPlayingGames(token);
-            set({ playingGames: data.nowPlaying || [] });
-            return data.nowPlaying || [];
+            if (token) {
+                const data = await getPlayingGames(token);
+                lichessGames = data.nowPlaying || [];
+            }
         } catch (err) {
-            console.error('Failed to fetch playing games:', err);
-            return [];
+            console.error('Failed to fetch Lichess games:', err);
         }
+
+        try {
+            if (chesscomUsername) {
+                chesscomGames = await getChesscomCurrentGames(chesscomUsername);
+            }
+        } catch (err) {
+            console.error('Failed to fetch Chess.com games:', err);
+        }
+
+        const allGames = [...lichessGames, ...chesscomGames];
+
+        // Sort: Lichess real-time games first, then by recency
+        allGames.sort((a, b) => {
+            if (a.source !== b.source) {
+                return a.source === 'lichess' ? -1 : 1;
+            }
+            return 0; // Keep relative order otherwise
+        });
+
+        set({ playingGames: allGames });
+        return allGames;
     },
 
     // Chess.com Actions

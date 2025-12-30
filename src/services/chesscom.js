@@ -170,6 +170,77 @@ function extractOpeningFromPgn(pgn) {
     return 'Unknown';
 }
 
+
+/**
+ * Get current daily games
+ * https://api.chess.com/pub/player/{username}/games
+ */
+export async function getChesscomCurrentGames(username) {
+    const response = await fetch(`${CHESSCOM_API}/player/${username.toLowerCase()}/games`);
+
+    if (!response.ok) {
+        throw new Error('Failed to fetch current games');
+    }
+
+    const data = await response.json();
+    return (data.games || []).map(game => normalizeChesscomCurrentGame(game, username));
+}
+
+/**
+ * Normalize current game (Daily)
+ */
+function normalizeChesscomCurrentGame(game, username) {
+    const isWhite = game.white.toLowerCase().includes(username.toLowerCase()) ||
+        (game.white.username && game.white.username.toLowerCase() === username.toLowerCase());
+
+    // Chess.com daily games API structure is slightly different from archives
+    // It returns full URL for player sometimes, or username string
+    const getUsername = (playerUrlOrObj) => {
+        if (typeof playerUrlOrObj === 'string') {
+            return playerUrlOrObj.split('/').pop();
+        }
+        return playerUrlOrObj.username;
+    };
+
+    const whiteUsername = getUsername(game.white);
+    const blackUsername = getUsername(game.black);
+
+    // Determine whose turn it is
+    // Daily games usually have a 'turn' field: 'white' or 'black'
+    const turn = game.turn || (game.fen.split(' ')[1] === 'w' ? 'white' : 'black');
+
+    // Calculate time left (approximate for daily)
+    // Daily API usually gives 'move_by' timestamp
+    const now = Date.now() / 1000;
+    const moveBy = game.move_by || 0;
+    const secondsLeft = Math.max(0, moveBy - now);
+
+    return {
+        id: game.url.split('/').pop(),
+        gameId: game.url.split('/').pop(), // redundancy for compatibility
+        source: 'chesscom',
+        color: isWhite ? 'white' : 'black',
+        opponent: {
+            username: isWhite ? blackUsername : whiteUsername,
+            rating: '? (Daily)', // Daily games API often doesn't give rating in the simple list
+        },
+        fen: game.fen,
+        turn: turn,
+        isMyTurn: (isWhite && turn === 'white') || (!isWhite && turn === 'black'),
+        timeSeconds: secondsLeft,
+        url: game.url,
+        lastMove: game.last_move,
+        start_time: game.start_time,
+        time_class: 'daily',
+        // Mock state object for compatibility with Lichess structure in Home.jsx
+        state: {
+            wtime: turn === 'white' ? secondsLeft * 1000 : 0,
+            btime: turn === 'black' ? secondsLeft * 1000 : 0,
+            moves: game.pgn ? extractMovesFromPgn(game.pgn) : '',
+        }
+    };
+}
+
 /**
  * Storage helpers
  */
