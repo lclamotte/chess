@@ -1,16 +1,59 @@
-# React + Vite
+# ChessAnalyzer
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A chess companion app that connects to your Lichess and Chess.com accounts to track live games, review recent matches, and analyze your playing statistics.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+### Home
+- Connect your Lichess account (OAuth) and Chess.com account (public API)
+- View ratings across all time controls (Bullet, Blitz, Rapid, Daily, Puzzles)
+- Watch your live games in real-time with automatic position updates
 
-## React Compiler
+### Recents
+- Review your recent games from both platforms
+- Step through moves with keyboard navigation (arrow keys)
+- **Interactive board**: Click pieces to explore alternative lines and variations
+- See Stockfish evaluation and best move arrows
+- View move annotations from Lichess analysis (brilliancies, blunders, etc.)
+- Switch between platforms instantly (games are cached)
+- Customizable board themes (7 options)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Stats
+- View detailed playing statistics and performance metrics
+- Analyze your games by time control and result
 
-## Expanding the ESLint configuration
+## Tech Stack
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- **React 19** + **Vite** - Frontend framework
+- **Zustand** - State management
+- **Chess.js** - Move validation and game logic
+- **Stockfish 17** - Local chess engine analysis (Web Worker)
+- **Tailwind CSS** - Styling
+- **React Router** - Navigation
+
+## Getting Started
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+```
+
+## API Integrations
+
+- **Lichess**: OAuth 2.0 with PKCE for authentication, streaming API for live games
+- **Chess.com**: Public API (no authentication required, just username)
+
+## Keyboard Shortcuts (Recents)
+
+| Key | Action |
+|-----|--------|
+| `←` / `→` | Navigate moves |
+| `↑` / `↓` | Jump to start/end |
+| `Shift + →` | Follow best move into variation |
+| `Shift + ←` | Return to main game line |
