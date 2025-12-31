@@ -14,6 +14,7 @@ import {
     getChesscomStats,
     getChesscomCurrentGames,
 } from '../services/chesscom';
+import { useGamesStore } from './gamesStore';
 
 /**
  * Auth store using Zustand
@@ -49,6 +50,7 @@ export const useAuthStore = create((set, get) => ({
 
     logout: () => {
         clearLichessToken();
+        useGamesStore.getState().clearLichessGames();
         set({
             isAuthenticated: false,
             token: null,
@@ -163,6 +165,7 @@ export const useAuthStore = create((set, get) => ({
 
     clearChesscomAccount: () => {
         clearChesscomUsername();
+        useGamesStore.getState().clearChesscomGames();
         set({
             chesscomUsername: null,
             chesscomUser: null,

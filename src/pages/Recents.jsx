@@ -1,60 +1,86 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Chess } from 'chess.js';
 import { useAuthStore } from '../stores/authStore';
-import { startLichessAuth, getUserGames } from '../services/lichess';
-import { getChesscomRecentGames, normalizeChesscomGame } from '../services/chesscom';
+import { useGamesStore } from '../stores/gamesStore';
+import { startLichessAuth } from '../services/lichess';
 import { PIECE_SVGS } from '../components/ChessPieces';
 import { useStockfish } from '../hooks/useStockfish';
 import EvalBar from '../components/EvalBar';
 
+// Board theme definitions
+const BOARD_THEMES = {
+    default: { name: 'Default', light: '#e0e7ff', dark: '#4f46e5' },
+    walnut: { name: 'Walnut', light: '#d4a76a', dark: '#8b5a2b' },
+    green: { name: 'Green', light: '#eeeed2', dark: '#769656' },
+    blue: { name: 'Blue', light: '#dee3e6', dark: '#8ca2ad' },
+    brown: { name: 'Brown', light: '#f0d9b5', dark: '#b58863' },
+    purple: { name: 'Purple', light: '#e8d0ff', dark: '#7c4dff' },
+    gray: { name: 'Gray', light: '#e8e8e8', dark: '#7d7d7d' },
+};
+
 export default function Recents() {
-    const { isAuthenticated, user, token, chesscomUsername } = useAuthStore();
+    const { isAuthenticated, user, chesscomUsername } = useAuthStore();
+    const {
+        lichessGames, chesscomGames,
+        lichessLoading, chesscomLoading,
+        lichessError, chesscomError,
+        fetchLichessGames, fetchChesscomGames,
+        refreshAll,
+    } = useGamesStore();
+
     const [platform, setPlatform] = useState('lichess'); // 'lichess' or 'chesscom'
-    const [games, setGames] = useState([]);
     const [selectedGame, setSelectedGame] = useState(null);
-    const [isLoading, setIsLoading] = useState(false);
     const [currentMoveIndex, setCurrentMoveIndex] = useState(-1);
-    const [error, setError] = useState(null);
     const [boardPosition, setBoardPosition] = useState('start');
     const [lastMoveSquares, setLastMoveSquares] = useState(null);
     const [copySuccess, setCopySuccess] = useState(false);
     const [variationMoves, setVariationMoves] = useState([]); // UCI moves in the explored variation
     const [inVariation, setInVariation] = useState(false);     // Are we exploring a variation?
+    const [selectedSquare, setSelectedSquare] = useState(null); // Currently selected square for making moves
+    const [boardTheme, setBoardTheme] = useState(() => {
+        return localStorage.getItem('chess-board-theme') || 'default';
+    });
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const activeMoveRef = useRef(null);
 
-    // Fetch recent games based on platform
+    // Get current platform's games and loading state
+    const games = platform === 'lichess' ? lichessGames : chesscomGames;
+    const isLoading = platform === 'lichess' ? lichessLoading : chesscomLoading;
+    const error = platform === 'lichess' ? lichessError : chesscomError;
+
+    // Listen for theme changes from navbar settings
     useEffect(() => {
-        const fetchRecentGames = async () => {
-            // Need either Lichess auth or Chess.com username
-            if (platform === 'lichess' && (!isAuthenticated || !user)) return;
-            if (platform === 'chesscom' && !chesscomUsername) return;
-
-            setIsLoading(true);
-            setError(null);
-            setSelectedGame(null);
-            setGames([]);
-
-            try {
-                let fetchedGames = [];
-
-                if (platform === 'lichess') {
-                    fetchedGames = await getUserGames(user.username, { max: 10 });
-                } else {
-                    // Chess.com
-                    const rawGames = await getChesscomRecentGames(chesscomUsername, 10);
-                    fetchedGames = rawGames.map(g => normalizeChesscomGame(g, chesscomUsername));
-                }
-
-                setGames(fetchedGames);
-            } catch (err) {
-                setError(err.message);
-            } finally {
-                setIsLoading(false);
-            }
+        const handleThemeChange = () => {
+            setBoardTheme(localStorage.getItem('chess-board-theme') || 'default');
         };
+        window.addEventListener('theme-change', handleThemeChange);
+        return () => window.removeEventListener('theme-change', handleThemeChange);
+    }, []);
 
-        fetchRecentGames();
-    }, [platform, isAuthenticated, user, chesscomUsername]);
+    // Fetch games for both platforms on mount (uses cache if already fetched)
+    useEffect(() => {
+        if (isAuthenticated && user) {
+            fetchLichessGames(user.username);
+        }
+        if (chesscomUsername) {
+            fetchChesscomGames(chesscomUsername);
+        }
+    }, [isAuthenticated, user, chesscomUsername, fetchLichessGames, fetchChesscomGames]);
+
+    // Handle refresh
+    const handleRefresh = async () => {
+        setIsRefreshing(true);
+        await refreshAll(user?.username, chesscomUsername);
+        setIsRefreshing(false);
+    };
+
+    // Clear selected game when switching platforms
+    useEffect(() => {
+        setSelectedGame(null);
+        setCurrentMoveIndex(-1);
+        setInVariation(false);
+        setVariationMoves([]);
+    }, [platform]);
 
     // Parse game moves and clocks
     const gameData = useMemo(() => {
@@ -361,6 +387,73 @@ export default function Recents() {
         return pos?.lastMove || null;
     }, [gameData, currentMoveIndex]);
 
+    // Get legal moves for the selected square
+    const legalMoves = useMemo(() => {
+        if (!selectedSquare || !currentPosition) return [];
+        try {
+            const chess = new Chess(currentPosition);
+            const moves = chess.moves({ square: selectedSquare, verbose: true });
+            return moves.map(m => m.to);
+        } catch {
+            return [];
+        }
+    }, [selectedSquare, currentPosition]);
+
+    // Handle square click for making moves
+    const handleSquareClick = (squareName) => {
+        if (!currentPosition) return;
+
+        const chess = new Chess(currentPosition);
+        const piece = chess.get(squareName);
+
+        // If clicking on a legal move destination, make the move
+        if (selectedSquare && legalMoves.includes(squareName)) {
+            try {
+                // Check if it's a pawn promotion
+                const fromPiece = chess.get(selectedSquare);
+                const isPromotion = fromPiece?.type === 'p' &&
+                    ((fromPiece.color === 'w' && squareName[1] === '8') ||
+                     (fromPiece.color === 'b' && squareName[1] === '1'));
+
+                const moveResult = chess.move({
+                    from: selectedSquare,
+                    to: squareName,
+                    promotion: isPromotion ? 'q' : undefined // Auto-promote to queen
+                });
+
+                if (moveResult) {
+                    // Create UCI move string
+                    const uciMove = selectedSquare + squareName + (isPromotion ? 'q' : '');
+                    setVariationMoves(prev => [...prev, uciMove]);
+                    setInVariation(true);
+                }
+            } catch (e) {
+                console.error('Invalid move:', e);
+            }
+            setSelectedSquare(null);
+            return;
+        }
+
+        // If clicking on own piece, select it
+        if (piece && piece.color === chess.turn()) {
+            setSelectedSquare(squareName);
+        } else {
+            setSelectedSquare(null);
+        }
+    };
+
+    // Clear selection when position changes (navigating moves)
+    useEffect(() => {
+        setSelectedSquare(null);
+    }, [currentMoveIndex, inVariation, variationMoves.length]);
+
+    // Function to return to branch point
+    const returnToBranchPoint = () => {
+        setVariationMoves([]);
+        setInVariation(false);
+        setSelectedSquare(null);
+    };
+
     const renderBoard = () => {
         const chess = new Chess(currentPosition);
         const board = chess.board();
@@ -413,17 +506,35 @@ export default function Recents() {
                                 ? false  // In variation, we don't highlight (arrow shows instead)
                                 : currentLastMove && (currentLastMove[0] === squareName || currentLastMove[1] === squareName);
 
+                            const isSelected = selectedSquare === squareName;
+                            const isLegalMove = legalMoves.includes(squareName);
+                            const hasPiece = !!square;
+                            const isClickable = hasPiece || isLegalMove;
+
+                            const theme = BOARD_THEMES[boardTheme] || BOARD_THEMES.default;
+
                             return (
                                 <div
                                     key={`${rank}-${file}`}
+                                    onClick={() => handleSquareClick(squareName)}
+                                    style={{ backgroundColor: isLight ? theme.light : theme.dark }}
                                     className={`
                                         aspect-square flex items-center justify-center text-4xl select-none relative
-                                        ${isLight ? 'bg-[#e0e7ff] text-slate-800' : 'bg-[#4f46e5] text-white'}
+                                        ${isLight ? 'text-slate-800' : 'text-white'}
                                         ${isLastMove ? 'after:absolute after:inset-0 after:bg-yellow-400/40' : ''}
+                                        ${isSelected ? 'ring-2 ring-inset ring-green-400' : ''}
+                                        ${isClickable ? 'cursor-pointer' : ''}
                                     `}
                                 >
+                                    {/* Legal move indicator */}
+                                    {isLegalMove && !hasPiece && (
+                                        <div className="absolute w-3 h-3 bg-green-500/60 rounded-full" />
+                                    )}
+                                    {isLegalMove && hasPiece && (
+                                        <div className="absolute inset-0 ring-4 ring-inset ring-green-500/60 rounded-sm" />
+                                    )}
                                     {square && (
-                                        <svg viewBox="0 0 45 45" className="w-full h-full p-1 drop-shadow-sm">
+                                        <svg viewBox="0 0 45 45" className="w-full h-full p-1 drop-shadow-sm relative z-10">
                                             {PIECE_SVGS[square.color === 'w' ? 'white' : 'black'][square.type]}
                                         </svg>
                                     )}
@@ -476,12 +587,6 @@ export default function Recents() {
                     </svg>
                 )}
 
-                {/* Variation mode indicator */}
-                {inVariation && (
-                    <div className="absolute top-2 right-2 px-2 py-1 bg-amber-500/90 text-xs font-semibold rounded text-slate-900">
-                        Exploring variation ({variationMoves.length} move{variationMoves.length !== 1 ? 's' : ''})
-                    </div>
-                )}
             </div>
         );
     };
@@ -496,27 +601,46 @@ export default function Recents() {
                     <p className="text-slate-400">Review your latest session with full game replay</p>
                 </div>
 
-                {/* Platform Toggle */}
-                <div className="flex bg-slate-800/50 rounded-lg p-1">
+                <div className="flex items-center gap-3">
+                    {/* Platform Toggle */}
+                    <div className="flex bg-slate-800/50 rounded-lg p-1">
+                        <button
+                            onClick={() => setPlatform('lichess')}
+                            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${platform === 'lichess'
+                                ? 'bg-indigo-600 text-white'
+                                : 'text-slate-400 hover:text-white'
+                                }`}
+                        >
+                            <img src="https://lichess.org/assets/logo/lichess-favicon-32.png" alt="" className="w-4 h-4 inline mr-2" />
+                            Lichess
+                        </button>
+                        <button
+                            onClick={() => setPlatform('chesscom')}
+                            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${platform === 'chesscom'
+                                ? 'bg-green-600 text-white'
+                                : 'text-slate-400 hover:text-white'
+                                }`}
+                        >
+                            <img src="https://www.chess.com/bundles/web/images/color-icons/handshake.svg" alt="" className="w-4 h-4 inline mr-2" />
+                            Chess.com
+                        </button>
+                    </div>
+
+                    {/* Refresh Button */}
                     <button
-                        onClick={() => setPlatform('lichess')}
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${platform === 'lichess'
-                            ? 'bg-indigo-600 text-white'
-                            : 'text-slate-400 hover:text-white'
-                            }`}
+                        onClick={handleRefresh}
+                        disabled={isRefreshing}
+                        className="p-2 rounded-lg bg-slate-800/50 hover:bg-slate-700/50 transition-colors disabled:opacity-50"
+                        title="Refresh games"
                     >
-                        <img src="https://lichess.org/assets/logo/lichess-favicon-32.png" alt="" className="w-4 h-4 inline mr-2" />
-                        Lichess
-                    </button>
-                    <button
-                        onClick={() => setPlatform('chesscom')}
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${platform === 'chesscom'
-                            ? 'bg-green-600 text-white'
-                            : 'text-slate-400 hover:text-white'
-                            }`}
-                    >
-                        <img src="https://www.chess.com/bundles/web/images/color-icons/handshake.svg" alt="" className="w-4 h-4 inline mr-2" />
-                        Chess.com
+                        <svg
+                            className={`w-5 h-5 text-slate-400 ${isRefreshing ? 'animate-spin' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
                     </button>
                 </div>
             </div>
@@ -560,7 +684,8 @@ export default function Recents() {
                         </h3>
                         <div className="space-y-2 max-h-[600px] overflow-y-auto">
                             {games.map((game, i) => {
-                                const isWhite = game.players?.white?.user?.name?.toLowerCase() === user?.username?.toLowerCase();
+                                const currentUsername = platform === 'lichess' ? user?.username : chesscomUsername;
+                                const isWhite = game.players?.white?.user?.name?.toLowerCase() === currentUsername?.toLowerCase();
                                 const opponent = isWhite ? game.players?.black : game.players?.white;
                                 const result = game.winner === (isWhite ? 'white' : 'black') ? 'win' :
                                     game.winner ? 'loss' : 'draw';
@@ -609,7 +734,15 @@ export default function Recents() {
                             <div className="grid lg:grid-cols-3 gap-6">
                                 {/* Board */}
                                 <div className="lg:col-span-2">
-                                    <div className="glass-card p-6">
+                                    {/* Variation mode indicator - positioned above the card */}
+                                <div className="h-6 flex justify-end items-center mb-1">
+                                    {inVariation && (
+                                        <div className="px-2 py-0.5 bg-amber-500/90 text-xs font-semibold rounded text-slate-900">
+                                            Exploring variation ({variationMoves.length} move{variationMoves.length !== 1 ? 's' : ''})
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="glass-card p-6">
                                         <div className="flex gap-4 max-w-[540px] mx-auto items-stretch">
                                             <div className="flex-1">
                                                 {renderBoard()}
@@ -639,6 +772,22 @@ export default function Recents() {
                                                 </span>
                                             )}
                                         </div>
+
+                                        {/* Return to branch point button */}
+                                        {inVariation && (
+                                            <div className="flex items-center justify-center mt-4">
+                                                <button
+                                                    onClick={returnToBranchPoint}
+                                                    className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-400 rounded-lg transition-colors text-sm font-medium"
+                                                    title="Return to branch point (Shift+←)"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                                    </svg>
+                                                    Return to game
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 

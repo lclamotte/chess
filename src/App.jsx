@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout/Layout';
 import Home from './pages/Home';
-import Analysis from './pages/Analysis';
 import Stats from './pages/Stats';
 import AuthCallback from './pages/AuthCallback';
 import Recents from './pages/Recents';
@@ -12,7 +11,6 @@ function App() {
       <Layout>
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/analysis" element={<Analysis />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="/recents" element={<Recents />} />
           <Route path="/auth/callback" element={<AuthCallback />} />

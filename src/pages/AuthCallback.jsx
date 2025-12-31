@@ -27,7 +27,7 @@ export default function AuthCallback() {
             handleLichessCallback(code, state)
                 .then((token) => {
                     setToken(token);
-                    navigate('/live');
+                    navigate('/');
                 })
                 .catch((err) => {
                     console.error('Token exchange failed:', err);

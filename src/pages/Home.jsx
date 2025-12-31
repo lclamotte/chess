@@ -8,7 +8,7 @@ import { CUSTOM_PIECES } from '../components/ChessPieces';
 export default function Home() {
     const {
         isAuthenticated, user, token, playingGames, fetchPlayingGames,
-        loadProfile,
+        loadProfile, logout,
         chesscomUsername, chesscomUser, setChesscomUsername, loadChesscomProfile, clearChesscomAccount,
         isLoading, error
     } = useAuthStore();
@@ -269,14 +269,23 @@ export default function Home() {
                                     <h4 className="font-semibold text-lg">{user.username}</h4>
                                     <p className="text-xs text-green-400">● Connected</p>
                                 </div>
-                                <a
-                                    href={`https://lichess.org/@/${user.username}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-xs text-slate-400 hover:text-indigo-400 transition-colors"
-                                >
-                                    View Profile →
-                                </a>
+                                <div className="flex items-center gap-2">
+                                    <a
+                                        href={`https://lichess.org/@/${user.username}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-xs text-slate-400 hover:text-indigo-400 transition-colors"
+                                    >
+                                        Profile →
+                                    </a>
+                                    <button
+                                        onClick={logout}
+                                        className="text-xs text-red-400 hover:text-red-300"
+                                        title="Disconnect"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Ratings Grid */}
